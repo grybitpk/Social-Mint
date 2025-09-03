@@ -51,20 +51,39 @@ const App: React.FC = () => {
             geminiService.init(savedKey);
 
             setIsAuthenticated(true);
-            const savedProjects = localStorage.getItem('projects');
-            if (savedProjects) {
-                setProjects(JSON.parse(savedProjects));
-            }
             setStep('projectDashboard');
+
+            // Fetch projects from the backend
+            const fetchProjects = async () => {
+                setIsLoading(true);
+                try {
+                    const response = await fetch('/api/getProjects');
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch projects: ${response.statusText}`);
+                    }
+                    const data = await response.json();
+                    
+                    // Map snake_case from DB to camelCase in app state and initialize client-side fields
+                    const formattedProjects: Project[] = data.map((p: any) => ({
+                        id: p.id,
+                        name: p.name,
+                        brandInfo: p.brand_info, // Mapping
+                        generatedPosts: [],
+                        scheduledPosts: {},
+                        history: [],
+                    }));
+                    setProjects(formattedProjects);
+                } catch (err) {
+                    console.error(err);
+                    setError("Could not load projects from the database. Please check your connection and Netlify function logs.");
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            fetchProjects();
         }
     }, []);
 
-    // Persist projects to localStorage whenever they change
-    useEffect(() => {
-        if (isAuthenticated && projects.length > 0) {
-            localStorage.setItem('projects', JSON.stringify(projects));
-        }
-    }, [projects, isAuthenticated]);
 
     const handleSaveApiKey = (key: string) => {
         setApiKey(key);
@@ -81,12 +100,12 @@ const App: React.FC = () => {
     const handleLogin = () => {
         localStorage.setItem('isAuthenticated', 'true');
         setIsAuthenticated(true);
-        setStep('projectDashboard');
+        // Reload to trigger useEffect for fetching data
+        window.location.reload();
     };
 
     const handleLogout = () => {
         localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('projects');
         localStorage.removeItem('apiKey');
         setIsAuthenticated(false);
         setStep('login');
@@ -96,18 +115,42 @@ const App: React.FC = () => {
         geminiService.init('');
     };
 
-    const handleCreateProject = (name: string, brandInfo: UserInput) => {
-        const newProject: Project = {
-            id: crypto.randomUUID(),
-            name,
-            brandInfo,
-            generatedPosts: [],
-            scheduledPosts: {},
-            history: [],
-        };
-        setProjects(prev => [...prev, newProject]);
-        setActiveProjectId(newProject.id);
-        setStep('input');
+    const handleCreateProject = async (name: string, brandInfo: UserInput) => {
+        setIsLoading(true);
+        try {
+            const response = await fetch('/api/createProject', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, brandInfo }),
+            });
+    
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to create project');
+            }
+    
+            const newProjectFromDB = await response.json();
+    
+            // Map db response to Project type
+            const formattedProject: Project = {
+                id: newProjectFromDB.id,
+                name: newProjectFromDB.name,
+                brandInfo: newProjectFromDB.brand_info,
+                generatedPosts: [],
+                scheduledPosts: {},
+                history: [],
+            };
+    
+            setProjects(prev => [formattedProject, ...prev]);
+            setActiveProjectId(formattedProject.id);
+            setStep('input');
+    
+        } catch (err) {
+            console.error(err);
+            setError(`Failed to create the new project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleSelectProject = (projectId: string) => {
@@ -407,13 +450,13 @@ const App: React.FC = () => {
         return <LoginScreen onLogin={handleLogin} />;
     }
 
-    if (!activeProject && step !== 'projectDashboard') {
-        // If no active project, always show dashboard (unless logging out)
-        return <ProjectDashboard projects={projects} onCreateProject={handleCreateProject} onSelectProject={handleSelectProject} />;
+    if (step === 'projectDashboard') {
+         return <ProjectDashboard projects={projects} onCreateProject={handleCreateProject} onSelectProject={handleSelectProject} isLoading={isLoading} />;
     }
-
-    if(step === 'projectDashboard') {
-        return <ProjectDashboard projects={projects} onCreateProject={handleCreateProject} onSelectProject={handleSelectProject} />;
+    
+    if (!activeProject) {
+        // If no active project, but not on dashboard, redirect to dashboard.
+        return <ProjectDashboard projects={projects} onCreateProject={handleCreateProject} onSelectProject={handleSelectProject} isLoading={isLoading}/>;
     }
 
 
@@ -441,7 +484,7 @@ const App: React.FC = () => {
                     <div className="flex-grow">
                         {renderContent()}
                     </div>
-                    {step === 'generation' && activeProject && (
+                    {step === 'generation' && activeProject && activeProject.history && (
                         <aside className="w-full md:w-1/3 lg:w-1/4 animate-fade-in flex-shrink-0">
                             <HistoryPanel history={activeProject.history} />
                         </aside>

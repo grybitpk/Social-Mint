@@ -3,14 +3,16 @@ import React, { useState } from 'react';
 import { Project, UserInput } from '../types';
 import { SparklesIcon } from './icons/SparklesIcon';
 import { CloseIcon } from './icons/CloseIcon';
+import Loader from './Loader';
 
 interface ProjectDashboardProps {
     projects: Project[];
     onCreateProject: (name: string, brandInfo: UserInput) => void;
     onSelectProject: (projectId: string) => void;
+    isLoading: boolean;
 }
 
-const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ projects, onCreateProject, onSelectProject }) => {
+const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ projects, onCreateProject, onSelectProject, isLoading }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [name, setName] = useState('');
     const [url, setUrl] = useState('');
@@ -35,7 +37,7 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ projects, onCreateP
             <h3 className="text-xl font-bold text-onPrimary truncate">{project.name}</h3>
             <p className="text-sm text-secondary truncate mt-1">{project.brandInfo.url}</p>
             <p className="text-xs text-onSurfaceSecondary mt-4">
-                {project.generatedPosts.length} posts, {Object.keys(project.scheduledPosts).length} scheduled
+                {project.generatedPosts?.length || 0} posts, {Object.keys(project.scheduledPosts || {}).length} scheduled
             </p>
         </div>
     );
@@ -100,7 +102,11 @@ const ProjectDashboard: React.FC<ProjectDashboardProps> = ({ projects, onCreateP
                     </button>
                 </div>
 
-                {projects.length > 0 ? (
+                {isLoading ? (
+                    <div className="text-center py-20">
+                        <Loader />
+                    </div>
+                ) : projects.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
                         {projects.map(p => <ProjectCard key={p.id} project={p} />)}
                     </div>
