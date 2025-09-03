@@ -145,6 +145,8 @@ export const generatePosts = async (input: UserInput, settings: GenerationSettin
       ...p,
       id: crypto.randomUUID(),
       ctas: ctas,
+      postType: settings.postType,
+      tone: settings.tone,
   }));
 };
 

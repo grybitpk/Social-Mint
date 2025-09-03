@@ -43,6 +43,8 @@ export interface PostVariations {
 export interface Post {
   id: string;
   content: string;
+  postType: string;
+  tone: string;
   caption?: Caption;
   ctas: string[];
   visualSuggestionUrl?: string;
